@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Creates a proxy server using a small EC2 instance with the latest Ubuntu Jammy AMI and Tinyproxy.'
+
+# Parameters
+Parameters:
+  VpcId:
+    Description: ID of an existing VPC
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetId:
+    Description: Name of an existing public
+    Type: AWS::EC2::Subnet::Id
+  KeyPair:
+    Description: Name of an existing EC2 key pair accessing the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 key pair.
+  InstanceType:
+    Description: EC2 Instance type (T Family)
+    Type: String
+    Default: t4g.nano
+    AllowedValues: [t4g.nano, t4g.micro, t4g.small, t4g.medium,
+      t4g.large, t3.nano, t3.micro, t3.small, t3.medium, t3.large]
+    ConstraintDescription: Must be a valid EC2 instance type.
+  SshIp:
+    Description: The IP address or range allowed to SSH to this EC2 instance
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x
+
+# Conditions
+Conditions:
+  isGraviton: !Or [!Equals [!Ref InstanceType, t4g.nano], !Equals [!Ref InstanceType, t4g.micro],
+    !Equals [!Ref InstanceType, t4g.small], !Equals [!Ref InstanceType, t4g.medium], !Equals [!Ref InstanceType, t4g.large]]
+
+# AMI and region mappings
+Mappings:
+  Region:
+    us-east-1:
+      arm64: ami-01625be155ee390e9
+      amd64: ami-00874d747dde814fa
+    us-east-2:
+      arm64: ami-08de105e126fec8d8
+      amd64: ami-0ab0629dba5ae551d
+    us-west-1:
+      arm64: ami-0cba0b4035dacbd55
+      amd64: ami-09b2a1e33ce552e68
+    us-west-2:
+      arm64: ami-072d13a1cd84b5f6b
+      amd64: ami-095413544ce52437d
+
+# Resources
+Resources:
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref 'InstanceType'
+      SecurityGroupIds: [ !GetAtt SecurityGroupIngressSSH.GroupId, !GetAtt SecurityGroupIngressHTTP.GroupId ]
+      KeyName: !Ref 'KeyPair'
+      ImageId: !If [ isGraviton, !FindInMap [Region, !Ref 'AWS::Region', arm64], !FindInMap [Region, !Ref 'AWS::Region', amd64] ]
+      SubnetId: !Ref PublicSubnetId
+      BlockDeviceMappings:
+      - DeviceName: /dev/sda1
+        Ebs:
+          DeleteOnTermination: true
+          VolumeSize: 8
+          VolumeType: gp3
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            apt-get update -y
+            apt-get upgrade -y
+            apt-get install tinyproxy tmux
+            echo "Allow ${SshIp}" >> /etc/tinyproxy/tinyproxy.conf
+            systemctl enable tinyproxy
+            systemctl restart tinyproxy
+  SecurityGroupIngressSSH:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH connections from MyIP
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: !Ref 'SshIp'
+  SecurityGroupIngressHTTP:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Tinyproxy connections from MyIP
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 8888
+        ToPort: 8888
+        CidrIp: !Ref 'SshIp'
+
+# Outputs
+Outputs:
+  InstanceId:
+    Description: InstanceId of the newly created EC2 instance
+    Value: !Ref Ec2Instance
+  AZ:
+    Description: Availability Zone of the newly created EC2 instance
+    Value: !GetAtt [Ec2Instance, AvailabilityZone]
+  PublicDNS:
+    Description: Public DNSName of the newly created EC2 instance
+    Value: !GetAtt [Ec2Instance, PublicDnsName]
+  PublicIP:
+    Description: Public IP address of the newly created EC2 instance
+    Value: !GetAtt [Ec2Instance, PublicIp]
