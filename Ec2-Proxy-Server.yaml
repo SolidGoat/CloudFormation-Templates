@@ -1,5 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Creates a proxy server using a small EC2 instance with the latest Ubuntu Jammy AMI and Tinyproxy.'
+Description: 'Creates a proxy server using the T4g or T3 Family EC2 instance type with Ubuntu Jammy 22.04 LTS AMI and Tinyproxy.
+You also have the ability to use this as a SOCKS5 proxy because of SSH port in the security group.
+WARNING: Proxy does not require authentication, so be mindful of what IP range you allow to connect.'
 
 # Parameters
 Parameters:
@@ -7,21 +9,21 @@ Parameters:
     Description: ID of an existing VPC
     Type: AWS::EC2::VPC::Id
   PublicSubnetId:
-    Description: Name of an existing public
+    Description: Name of an existing public subnet
     Type: AWS::EC2::Subnet::Id
   KeyPair:
-    Description: Name of an existing EC2 key pair accessing the instance
+    Description: Name of an existing EC2 key pair for accessing the instance
     Type: AWS::EC2::KeyPair::KeyName
     ConstraintDescription: Must be the name of an existing EC2 key pair.
   InstanceType:
-    Description: EC2 Instance type (T Family)
+    Description: EC2 Instance type (T4g or T3 Family)
     Type: String
     Default: t4g.nano
     AllowedValues: [t4g.nano, t4g.micro, t4g.small, t4g.medium,
       t4g.large, t3.nano, t3.micro, t3.small, t3.medium, t3.large]
-    ConstraintDescription: Must be a valid EC2 instance type.
-  SshIp:
-    Description: The IP address or range allowed to SSH to this EC2 instance
+    ConstraintDescription: Must be a valid T4g or T3 instance type.
+  IncomingIP:
+    Description: The IP address or range allowed to connect to this proxy server
     Type: String
     MinLength: 9
     MaxLength: 18
@@ -37,18 +39,90 @@ Conditions:
 # AMI and region mappings
 Mappings:
   Region:
+    af-south-1:
+      amd64: ami-085d7c5ed6c47da72
+      arm64: ami-0a07f131b46310277
+    ap-east-1:
+      amd64: ami-050eeeeea5805d75b
+      arm64: ami-0ab2380c5650be974
+    ap-northeast-1:
+      amd64: ami-0e250adc27214ced5
+      arm64: ami-0d3ff2ce9993e5135
+    ap-northeast-2:
+      amd64: ami-039c6c8b7212df747
+      arm64: ami-06c3718fe091036c3
+    ap-northeast-3:
+      amd64: ami-0665945cfeb36e972
+      arm64: ami-087e469b73954e289
+    ap-south-1:
+      amd64: ami-0b2d10dd2f6c1babd
+      arm64: ami-054c705cf8b229d9d
+    ap-south-2:
+      amd64: ami-0b4e97d64c8cbc8cb
+      arm64: ami-035d85e4b9fe3a7fd
+    ap-southeast-1:
+      amd64: ami-08fad42036d22d32d
+      arm64: ami-013cf51f360a57131
+    ap-southeast-2:
+      amd64: ami-001ce199760f46907
+      arm64: ami-0cf25d66769f45ea5
+    ap-southeast-3:
+      amd64: ami-0a771e72e1f9777cb
+      arm64: ami-0afcbf8b19e0f291d
+    ap-southeast-4:
+      amd64: ami-0ed4477a5a9f76fc8
+      arm64: ami-0d18c275cc9c3c7ea
+    ca-central-1:
+      amd64: ami-0bb9f02ed5a2dfdc6
+      arm64: ami-0c46e7a2b195be0eb
+    eu-central-1:
+      amd64: ami-0c3472daea3f355b7
+      arm64: ami-0868828dc450dee2f
+    eu-central-2:
+      amd64: ami-0e4d1886bf4bb88d5
+      arm64: ami-08479160849a41e25
+    eu-north-1:
+      amd64: ami-01774536c57ab815f
+      arm64: ami-058d6eb6cd7ae2a8a
+    eu-south-1:
+      amd64: ami-088d3d25a75944f99
+      arm64: ami-0e6866ce259013169
+    eu-south-2:
+      amd64: ami-02551197367f90c14
+      arm64: ami-0dc8808686039d44f
+    eu-west-1:
+      amd64: ami-0ab14756db2442499
+      arm64: ami-0abdeb283774a31d1
+    eu-west-2:
+      amd64: ami-063e8f8a5f0599010
+      arm64: ami-075795f7b7bc466fc
+    eu-west-3:
+      amd64: ami-029c608efaef0b395
+      arm64: ami-0201b39f9d48700fd
+    il-central-1:
+      amd64: ami-029294a043b4c7a97
+      arm64: ami-02f0702d0879fddfb
+    me-central-1:
+      amd64: ami-0f2c36ff85fb40715
+      arm64: ami-0d3706903ea87dd71
+    me-south-1:
+      amd64: ami-02ce6813c8dc9f3d6
+      arm64: ami-0d4bd97e5d3b33711
+    sa-east-1:
+      amd64: ami-00142cf6b8e05296d
+      arm64: ami-0e5c21a771a0e183f
     us-east-1:
-      arm64: ami-01625be155ee390e9
-      amd64: ami-00874d747dde814fa
+      amd64: ami-02675d30b814d1daa
+      arm64: ami-067cf009aedb2612d
     us-east-2:
-      arm64: ami-08de105e126fec8d8
-      amd64: ami-0ab0629dba5ae551d
+      amd64: ami-05d251e0fc338590c
+      arm64: ami-0b5801d081fa3a76c
     us-west-1:
-      arm64: ami-0cba0b4035dacbd55
-      amd64: ami-09b2a1e33ce552e68
+      amd64: ami-01973462ceff35e85
+      arm64: ami-0819328f1fed7fbc8
     us-west-2:
-      arm64: ami-072d13a1cd84b5f6b
-      amd64: ami-095413544ce52437d
+      amd64: ami-016d1b215ea28dcee
+      arm64: ami-06edaf01ee52adb1e
 
 # Resources
 Resources:
@@ -73,41 +147,44 @@ Resources:
             apt-get update -y
             apt-get upgrade -y
             apt-get install tinyproxy tmux
-            echo "Allow ${SshIp}" >> /etc/tinyproxy/tinyproxy.conf
+            echo "Allow ${IncomingIP}" >> /etc/tinyproxy/tinyproxy.conf
             systemctl enable tinyproxy
             systemctl restart tinyproxy
   SecurityGroupIngressSSH:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow SSH connections from MyIP
+      GroupDescription: Allow SSH
       VpcId: !Ref VpcId
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 22
         ToPort: 22
-        CidrIp: !Ref 'SshIp'
+        CidrIp: !Ref 'IncomingIP'
   SecurityGroupIngressHTTP:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow Tinyproxy connections from MyIP
+      GroupDescription: Allow Tinyproxy on TCP8888
       VpcId: !Ref VpcId
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 8888
         ToPort: 8888
-        CidrIp: !Ref 'SshIp'
+        CidrIp: !Ref 'IncomingIP'
 
 # Outputs
 Outputs:
   InstanceId:
-    Description: InstanceId of the newly created EC2 instance
+    Description: InstanceId of EC2 instance
     Value: !Ref Ec2Instance
   AZ:
-    Description: Availability Zone of the newly created EC2 instance
+    Description: Availability Zone of EC2 instance
     Value: !GetAtt [Ec2Instance, AvailabilityZone]
   PublicDNS:
-    Description: Public DNSName of the newly created EC2 instance
+    Description: Public DNSName of EC2 instance
     Value: !GetAtt [Ec2Instance, PublicDnsName]
   PublicIP:
-    Description: Public IP address of the newly created EC2 instance
+    Description: Public IP address of EC2 instance
     Value: !GetAtt [Ec2Instance, PublicIp]
+  SshCommand:
+    Description: SSH dynamic port forward for SOCKS5 proxy
+    Value: !Sub "ssh -i <KeyPair> -D 8081 ubuntu@${Ec2Instance.PublicIp}"
